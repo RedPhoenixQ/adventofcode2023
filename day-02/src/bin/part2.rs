@@ -8,10 +8,6 @@ use nom::{
     IResult,
 };
 
-const RED: i32 = 12;
-const GREEN: i32 = 13;
-const BLUE: i32 = 14;
-
 #[derive(Debug, PartialEq)]
 struct Game {
     id: i32,
@@ -38,8 +34,7 @@ fn process(input: &str) -> String {
     games
         .into_iter()
         .map(|game| {
-            let total_blocks = game
-                .movesets
+            game.movesets
                 .into_iter()
                 .map(|moves| {
                     moves.into_iter().fold(Bag::default(), |mut sum, m| {
@@ -56,16 +51,9 @@ fn process(input: &str) -> String {
                     green: green.max(acc.green),
                     blue: blue.max(acc.blue),
                 })
-                .unwrap_or_default();
-            (game.id, total_blocks)
+                .unwrap_or_default()
         })
-        .filter_map(|(id, Bag { red, green, blue })| {
-            if red > RED || green > GREEN || blue > BLUE {
-                None
-            } else {
-                Some(id)
-            }
-        })
+        .map(|Bag { red, green, blue }| red * green * blue)
         .sum::<i32>()
         .to_string()
 }
@@ -111,7 +99,7 @@ mod test {
     Game 3: 8 green, 6 blue, 20 red; 5 blue, 4 red, 13 green; 5 green, 1 red
     Game 4: 1 green, 3 red, 6 blue; 3 green, 6 red; 3 green, 15 blue, 14 red
     Game 5: 6 red, 1 blue, 3 green; 2 blue, 1 red, 2 green";
-    const ANSWER: &str = "8";
+    const ANSWER: &str = "2286";
 
     #[test]
     fn example() {
