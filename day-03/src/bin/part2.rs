@@ -3,13 +3,15 @@ fn process(input: &str) -> String {
         .lines()
         .enumerate()
         .flat_map(|(y, line)| {
-            line.chars().enumerate().filter_map(move |(x, c)| {
-                if c != '.' && !c.is_numeric() {
-                    Some((x, y))
-                } else {
-                    None
-                }
-            })
+            line.chars().enumerate().filter_map(
+                move |(x, c)| {
+                    if c == '*' {
+                        Some((x, y))
+                    } else {
+                        None
+                    }
+                },
+            )
         })
         .collect();
 
@@ -17,7 +19,7 @@ fn process(input: &str) -> String {
 
     let numbers: Vec<_> = symbols
         .into_iter()
-        .flat_map(|(x, y)| {
+        .filter_map(|(x, y)| {
             let mut out: Vec<i32> = vec![];
             for line_i in [y - 1, y, y + 1] {
                 let Some(line) = lines.get(line_i) else {
@@ -77,7 +79,10 @@ fn process(input: &str) -> String {
                     }
                 }
             }
-            out
+            match out.as_slice() {
+                &[a, b] => Some(a * b),
+                _ => None, // Not a valid gear ratio
+            }
         })
         .collect();
     dbg!(&numbers);
@@ -103,7 +108,7 @@ mod test {
 ......755.
 ...$.*....
 .664.598..";
-    const ANSWER: &str = "4361";
+    const ANSWER: &str = "467835";
 
     #[test]
     fn example() {
