@@ -37,14 +37,13 @@ fn count_wins(card: Card) -> usize {
 fn extract_card_copies(all_wins: Vec<usize>) -> BTreeMap<usize, usize> {
     let mut map: BTreeMap<usize, usize> = (0..all_wins.len()).map(|i| (i, 1)).collect();
     for (i, wins) in all_wins.into_iter().enumerate() {
-        for _ in 0..*map.get(&i).unwrap_or(&1) {
-            for next_card in i + 1..=i + wins {
-                if let Some(repeat_num) = map.get_mut(&next_card) {
-                    *repeat_num += 1;
-                } else {
-                    map.insert(next_card, 1);
-                };
-            }
+        let repeats = *map.get(&i).unwrap_or(&1);
+        for next_card in i + 1..=i + wins {
+            if let Some(repeat_num) = map.get_mut(&next_card) {
+                *repeat_num += repeats;
+            } else {
+                map.insert(next_card, repeats);
+            };
         }
     }
     map
