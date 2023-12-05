@@ -21,6 +21,12 @@ struct MapRange {
     range_len: u32,
 }
 
+#[derive(Debug)]
+struct Range {
+    start: u32,
+    len: u32,
+}
+
 impl Map<'_> {
     fn source_to_destination(&self, source: u32) -> u32 {
         if let Some(range) = self.ranges.iter().find(
@@ -28,7 +34,7 @@ impl Map<'_> {
                  source_start,
                  range_len,
                  ..
-             }| { source > *source_start && source - source_start < *range_len },
+             }| { source >= *source_start && source - source_start < *range_len },
         ) {
             range.destination_start + (source - range.source_start)
         } else {
@@ -38,25 +44,33 @@ impl Map<'_> {
 }
 
 fn process(input: &str) -> String {
-    let (_, (seeds, maps)) = parse(input).unwrap();
-    dbg!(&seeds);
-    dbg!(&maps);
+    let (_, (seed_ranges, maps)) = parse(input).unwrap();
+    //dbg!(&seed_ranges);
+    //dbg!(&maps);
 
-    let final_dest = maps.into_iter().fold(seeds, |dest, map| {
-        dest.into_iter()
-            .map(|n| map.source_to_destination(n))
-            .collect()
-    });
-
-    dbg!(&final_dest);
-
-    final_dest.into_iter().min().unwrap().to_string()
+    seed_ranges
+        .into_iter()
+        .fold(u32::MAX, |min, Range { start, len }| {
+            (start..start + len)
+                .fold(u32::MAX, |min_seed, seed| {
+                    maps.iter()
+                        .fold(seed, |num, map| map.source_to_destination(num))
+                        .min(min_seed)
+                })
+                .min(min)
+        })
+        .to_string()
 }
 
-fn parse(input: &str) -> IResult<&str, (Vec<u32>, Vec<Map>)> {
+fn parse(input: &str) -> IResult<&str, (Vec<Range>, Vec<Map>)> {
     let (input, seeds) = delimited(
         tag("seeds: "),
-        separated_list1(multispace1, u32),
+        separated_list1(
+            multispace1,
+            map(separated_pair(u32, multispace1, u32), |(start, len)| {
+                Range { start, len }
+            }),
+        ),
         multispace1,
     )(input)?;
 
@@ -127,7 +141,7 @@ temperature-to-humidity map:
 humidity-to-location map:
 60 56 37
 56 93 4";
-    const ANSWER: &str = "35";
+    const ANSWER: &str = "46";
 
     #[test]
     fn example() {
