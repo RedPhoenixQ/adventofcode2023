@@ -1,3 +1,4 @@
+use indicatif::ProgressIterator;
 use nom::{
     bytes::complete::tag,
     character::complete::{alpha1, multispace1, u32},
@@ -50,8 +51,10 @@ fn process(input: &str) -> String {
 
     seed_ranges
         .into_iter()
+        .progress()
         .fold(u32::MAX, |min, Range { start, len }| {
             (start..start + len)
+                .progress()
                 .fold(u32::MAX, |min_seed, seed| {
                     maps.iter()
                         .fold(seed, |num, map| map.source_to_destination(num))
