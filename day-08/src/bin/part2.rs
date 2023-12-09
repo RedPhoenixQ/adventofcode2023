@@ -11,15 +11,6 @@ use nom::{
 };
 use nom_supreme::{multi::collect_separated_terminated, ParserExt};
 
-type NodeId<'a> = &'a str;
-
-#[derive(Debug, Clone, Copy)]
-struct Node<'a> {
-    id: NodeId<'a>,
-    left: NodeId<'a>,
-    right: NodeId<'a>,
-}
-
 #[derive(Debug, Clone, Copy)]
 enum Instruction {
     Left,
