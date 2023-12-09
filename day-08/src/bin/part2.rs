@@ -31,7 +31,7 @@ fn process(input: &str) -> String {
         .filter_map(|&node_id| node_id.ends_with("A").then_some(node_id))
         .collect();
 
-    let mut current_step = 0;
+    let mut current_step = 0u64;
     let mut finished = false;
     while !finished {
         current_step += 1;
