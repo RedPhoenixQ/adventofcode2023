@@ -29,7 +29,7 @@ enum HandType {
 
 impl Hand {
     fn new(cards: Vec<Card>, bid: i32) -> Hand {
-        let card_counts = cards.iter().fold(BTreeMap::new(), |mut map, card| {
+        let mut card_counts = cards.iter().fold(BTreeMap::new(), |mut map, card| {
             if let Some(prev) = map.get(card) {
                 map.insert(card, prev + 1);
             } else {
@@ -38,19 +38,51 @@ impl Hand {
             map
         });
 
-        let hand_type = match (
-            card_counts.iter().count(),
-            card_counts.values().find(|&&num| num != 1),
-        ) {
-            (1, _) => HandType::FiveOfAKind,
-            (2, Some(&4)) => HandType::FourOfAKind,
-            (2, _) => HandType::FullHouse,
-            (3, Some(&3)) => HandType::ThreeOfAKind,
-            (3, Some(&2)) => HandType::TwoPair,
-            (4, _) => HandType::OnePair,
-            (5, _) => HandType::HighCard,
-            _ => unreachable!("invalid card count"),
+        fn determine_hand_type(cards: BTreeMap<&Card, i32>) -> HandType {
+            match (cards.iter().count(), cards.values().find(|&&num| num != 1)) {
+                (1, _) => HandType::FiveOfAKind,
+                (2, Some(&4)) => HandType::FourOfAKind,
+                (2, _) => HandType::FullHouse,
+                (3, Some(&3)) => HandType::ThreeOfAKind,
+                (3, Some(&2)) => HandType::TwoPair,
+                (4, _) => HandType::OnePair,
+                (5, _) => HandType::HighCard,
+                _ => unreachable!("invalid card count"),
+            }
+        }
+
+        fn joker_permutation(
+            cards: BTreeMap<&Card, i32>,
+            options: &Vec<Card>,
+            jokers_left: i32,
+        ) -> HandType {
+            dbg!(&cards, &options, &jokers_left);
+            if jokers_left == 0 {
+                determine_hand_type(cards)
+            } else {
+                options
+                    .iter()
+                    .map(move |card| {
+                        let mut new_cards = cards.clone();
+                        new_cards.insert(card, cards.get(card).unwrap() + 1);
+                        joker_permutation(new_cards, options, jokers_left - 1)
+                    })
+                    .max()
+                    .unwrap()
+            }
+        }
+
+        let hand_type = if let Some(jokers) = card_counts.remove(&Card::Joker) {
+            if jokers == 5 {
+                HandType::FiveOfAKind
+            } else {
+                let options = card_counts.keys().map(|card| **card).collect();
+                joker_permutation(card_counts, &options, jokers)
+            }
+        } else {
+            determine_hand_type(card_counts)
         };
+
         Hand {
             cards,
             hand_type,
@@ -80,8 +112,9 @@ impl PartialOrd for Hand {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 enum Card {
+    Joker,
     Two,
     Three,
     Four,
@@ -91,7 +124,6 @@ enum Card {
     Eight,
     Nine,
     Ten,
-    Jack,
     Queen,
     King,
     Ace,
@@ -101,6 +133,7 @@ impl TryInto<Card> for char {
     type Error = String;
     fn try_into(self) -> Result<Card, Self::Error> {
         Ok(match self {
+            'J' => Card::Joker,
             '2' => Card::Two,
             '3' => Card::Three,
             '4' => Card::Four,
@@ -110,7 +143,6 @@ impl TryInto<Card> for char {
             '8' => Card::Eight,
             '9' => Card::Nine,
             'T' => Card::Ten,
-            'J' => Card::Jack,
             'Q' => Card::Queen,
             'K' => Card::King,
             'A' => Card::Ace,
@@ -159,7 +191,7 @@ T55J5 684
 KK677 28
 KTJJT 220
 QQQJA 483";
-    const ANSWER: &str = "6440";
+    const ANSWER: &str = "5905";
 
     #[test]
     fn example() {
@@ -181,7 +213,7 @@ QQQJA 483";
                 hand_type: HandType::OnePair,
                 bid: 100,
             } < Hand {
-                cards: vec![Card::Ten, Card::Five, Card::Five, Card::Jack, Card::Five],
+                cards: vec![Card::Ten, Card::Five, Card::Five, Card::Joker, Card::Five],
                 hand_type: HandType::ThreeOfAKind,
                 bid: 100,
             }
@@ -192,7 +224,7 @@ QQQJA 483";
                 hand_type: HandType::TwoPair,
                 bid: 100,
             } > Hand {
-                cards: vec![Card::King, Card::Ten, Card::Jack, Card::Jack, Card::Ten],
+                cards: vec![Card::King, Card::Ten, Card::Joker, Card::Joker, Card::Ten],
                 hand_type: HandType::TwoPair,
                 bid: 100,
             }
