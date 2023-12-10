@@ -1,9 +1,9 @@
 use nom::{
     bytes::complete::tag,
     character::complete::{alpha1, multispace1, one_of},
-    combinator::{eof, recognize},
+    combinator::eof,
     multi::many1,
-    sequence::{delimited, separated_pair, tuple},
+    sequence::{delimited, separated_pair},
     IResult, Parser,
 };
 use nom_supreme::{multi::collect_separated_terminated, ParserExt};
