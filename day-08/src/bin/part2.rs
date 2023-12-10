@@ -10,8 +10,9 @@ use nom::{
     IResult, Parser,
 };
 use nom_supreme::{multi::collect_separated_terminated, ParserExt};
+use num::Integer;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Instruction {
     Left,
     Right,
@@ -22,36 +23,31 @@ fn process(input: &str) -> String {
     dbg!(&instructions);
     dbg!(&nodes);
 
-    let mut instructions = instructions
-        .into_iter()
-        .cycle()
-        .progress_count(1_000_000_000);
-    let mut active_nodes: Vec<_> = nodes
+    let active_nodes: Vec<_> = nodes
         .keys()
         .filter_map(|&node_id| node_id.ends_with("A").then_some(node_id))
         .collect();
 
-    let mut current_step = 0u64;
-    let mut finished = false;
-    while !finished {
-        current_step += 1;
-        finished = true;
-        let next_instruciton = instructions.next().unwrap();
-
-        for node_id in active_nodes.iter_mut() {
-            let node = nodes.get(node_id).expect("all referenced nodes to exist");
-            let next_node = match next_instruciton {
-                Instruction::Left => node.0,
-                Instruction::Right => node.1,
-            };
-            if finished && !next_node.ends_with("Z") {
-                finished = false
+    active_nodes
+        .into_iter()
+        .map(|node_id| {
+            let mut inst_iter = instructions.iter().cycle().progress_count(10_000_000);
+            let mut current_node = node_id;
+            let mut step = 0u64;
+            while !current_node.ends_with("Z") {
+                step += 1;
+                let node = nodes.get(current_node).unwrap();
+                current_node = match inst_iter.next().unwrap() {
+                    Instruction::Left => node.0,
+                    Instruction::Right => node.1,
+                };
             }
-            *node_id = next_node;
-        }
-    }
-
-    current_step.to_string()
+            step
+        })
+        .inspect(|n| println!("{n}"))
+        .reduce(|acc, n| acc.lcm(&n))
+        .unwrap()
+        .to_string()
 }
 
 fn parse(input: &str) -> IResult<&str, (Vec<Instruction>, BTreeMap<&str, (&str, &str)>)> {
