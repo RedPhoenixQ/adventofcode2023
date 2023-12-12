@@ -44,7 +44,7 @@ fn process(input: &str) -> String {
         .map(|line| line.chars().map(|c| c.try_into().ok()).collect())
         .collect();
 
-    let mut graph: Graph<Pipe, ()> = Graph::new();
+    let mut graph: DiGraph<Pipe, ()> = DiGraph::default();
     let mut grid: HashMap<(usize, usize), (NodeIndex, Pipe)> = HashMap::new();
 
     pipe_tiles.iter().enumerate().for_each(|(y, row)| {
@@ -65,12 +65,49 @@ fn process(input: &str) -> String {
             Pipe::NW90 => vec![Direction::North, Direction::West],
             Pipe::SE90 => vec![Direction::South, Direction::East],
             Pipe::SW90 => vec![Direction::South, Direction::West],
-            Pipe::Start => vec![
+            Pipe::Start => [
                 Direction::North,
+                Direction::East,
                 Direction::South,
                 Direction::West,
-                Direction::East,
-            ],
+            ]
+            .into_iter()
+            .filter(|direction| {
+                let coord = match direction {
+                    Direction::North => (x, y.wrapping_sub(1)),
+                    Direction::East => (x.wrapping_add(1), y),
+                    Direction::South => (x, y.wrapping_add(1)),
+                    Direction::West => (x.wrapping_sub(1), y),
+                };
+                if let Some((_, tile)) = grid.get(&coord) {
+                    match direction {
+                        Direction::North
+                            if matches!(tile, Pipe::Vertical | Pipe::SE90 | Pipe::SW90) =>
+                        {
+                            true
+                        }
+                        Direction::East
+                            if matches!(tile, Pipe::Horizontal | Pipe::NW90 | Pipe::SW90) =>
+                        {
+                            true
+                        }
+                        Direction::South
+                            if matches!(tile, Pipe::Vertical | Pipe::NE90 | Pipe::NW90) =>
+                        {
+                            true
+                        }
+                        Direction::West
+                            if matches!(tile, Pipe::Horizontal | Pipe::NE90 | Pipe::SE90) =>
+                        {
+                            true
+                        }
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
+            })
+            .collect(),
         }
         .into_iter()
         .map(move |dir| (dir, index, (x, y)))
@@ -85,7 +122,7 @@ fn process(input: &str) -> String {
         })
     }));
 
-    println!("{:?}", petgraph::dot::Dot::new(&graph));
+    // println!("{:?}", petgraph::dot::Dot::new(&graph));
 
     let (start, _) = grid
         .values()
