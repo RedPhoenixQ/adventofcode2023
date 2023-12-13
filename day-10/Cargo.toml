@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 petgraph.workspace = true
 glam.workspace = true
+itertools.workspace = true
