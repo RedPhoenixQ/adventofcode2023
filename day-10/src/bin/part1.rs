@@ -80,27 +80,19 @@ fn process(input: &str) -> String {
                     Direction::West => (x.wrapping_sub(1), y),
                 };
                 if let Some((_, tile)) = grid.get(&coord) {
-                    match direction {
-                        Direction::North
-                            if matches!(tile, Pipe::Vertical | Pipe::SE90 | Pipe::SW90) =>
-                        {
-                            true
-                        }
-                        Direction::East
-                            if matches!(tile, Pipe::Horizontal | Pipe::NW90 | Pipe::SW90) =>
-                        {
-                            true
-                        }
-                        Direction::South
-                            if matches!(tile, Pipe::Vertical | Pipe::NE90 | Pipe::NW90) =>
-                        {
-                            true
-                        }
-                        Direction::West
-                            if matches!(tile, Pipe::Horizontal | Pipe::NE90 | Pipe::SE90) =>
-                        {
-                            true
-                        }
+                    match (direction, tile) {
+                        (Direction::North, Pipe::Vertical)
+                        | (Direction::North, Pipe::SE90)
+                        | (Direction::North, Pipe::SW90)
+                        | (Direction::East, Pipe::Horizontal)
+                        | (Direction::East, Pipe::NW90)
+                        | (Direction::East, Pipe::SW90)
+                        | (Direction::South, Pipe::Vertical)
+                        | (Direction::South, Pipe::NE90)
+                        | (Direction::South, Pipe::NW90)
+                        | (Direction::West, Pipe::Horizontal)
+                        | (Direction::West, Pipe::NE90)
+                        | (Direction::West, Pipe::SE90) => true,
                         _ => false,
                     }
                 } else {
