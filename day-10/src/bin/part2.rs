@@ -109,7 +109,7 @@ impl Direction {
 }
 
 fn process(input: &str) -> String {
-    let mut grid: HashMap<IVec2, Option<Pipe>> = input
+    let grid: HashMap<IVec2, Option<Pipe>> = input
         .lines()
         .enumerate()
         .flat_map(|(y, line)| {
@@ -117,46 +117,6 @@ fn process(input: &str) -> String {
                 .map(move |(x, c)| (ivec2(x as i32, y as i32), c.try_into().ok()))
         })
         .collect();
-
-    fn walk_pipe(
-        current_pos: IVec2,
-        current_direction: Direction,
-        grid: &HashMap<IVec2, Option<Pipe>>,
-        pipe_tiles: &mut HashMap<IVec2, (Pipe, Direction)>,
-        right_turns: i32,
-    ) -> i32 {
-        let next_pos = current_pos + current_direction.get_offset();
-        let next_pipe = grid
-            .get(&next_pos)
-            .expect("tile to exist")
-            .expect("pipe to connect to another pipe");
-
-        if next_pipe == Pipe::Start {
-            return right_turns;
-        }
-
-        let next_direction = next_pipe
-            .next_direction(&current_direction)
-            .expect("to find the next");
-
-        pipe_tiles.insert(next_pos, (next_pipe, next_direction));
-
-        let turn = if current_direction == next_direction {
-            0
-        } else if current_direction.right() == next_direction {
-            1
-        } else {
-            -1
-        };
-
-        walk_pipe(
-            next_pos,
-            next_direction,
-            grid,
-            pipe_tiles,
-            right_turns + turn,
-        )
-    }
 
     let (&start_pos, _) = grid
         .iter()
@@ -195,8 +155,39 @@ fn process(input: &str) -> String {
     };
 
     let mut pipe_tiles: HashMap<IVec2, (Pipe, Direction)> = HashMap::new();
-    let right_turns = walk_pipe(start_pos, first_direction, &grid, &mut pipe_tiles, 0);
-    dbg!(&pipe_tiles, right_turns);
+
+    let mut right_turns = 0i32;
+    let mut current_pos = start_pos;
+    let mut current_direction = first_direction;
+    loop {
+        let next_pos = current_pos + current_direction.get_offset();
+        let next_pipe = grid
+            .get(&next_pos)
+            .expect("tile to exist")
+            .expect("pipe to connect to another pipe");
+
+        if next_pipe == Pipe::Start {
+            break;
+        }
+
+        let next_direction = next_pipe
+            .next_direction(&current_direction)
+            .expect("to find the next");
+
+        pipe_tiles.insert(next_pos, (next_pipe, next_direction));
+
+        right_turns += if current_direction == next_direction {
+            0
+        } else if current_direction.right() == next_direction {
+            1
+        } else {
+            -1
+        };
+        current_direction = next_direction;
+        current_pos = next_pos;
+    }
+
+    // dbg!(&pipe_tiles, right_turns);
 
     let allowed_to_turn_right = right_turns.is_positive();
 
