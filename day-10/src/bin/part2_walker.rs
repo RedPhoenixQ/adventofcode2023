@@ -1,6 +1,5 @@
 use glam::{ivec2, IVec2};
 use itertools::Itertools;
-use petgraph::{algo::dijkstra, prelude::*};
 
 use std::collections::HashMap;
 
@@ -52,12 +51,26 @@ impl Direction {
     }
 }
 
+impl std::ops::Not for Direction {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Direction::North => Direction::South,
+            Direction::East => Direction::West,
+            Direction::South => Direction::North,
+            Direction::West => Direction::East,
+        }
+    }
+}
+
 fn process(input: &str) -> String {
     let list_of_tiles: Vec<Vec<Option<Pipe>>> = input
         .lines()
         .map(|line| line.chars().map(|c| c.try_into().ok()).collect())
         .collect();
 
+    let mut start_pos = ivec2(-1, -1);
     let all_tiles: HashMap<IVec2, Option<Pipe>> = list_of_tiles
         .iter()
         .enumerate()
@@ -66,79 +79,14 @@ fn process(input: &str) -> String {
                 .enumerate()
                 .map(move |(x, &pipe)| (ivec2(x as i32, y as i32), pipe))
         })
-        .collect();
-
-    let mut graph: DiGraph<(IVec2, Pipe), ()> = DiGraph::default();
-    let mut pos_to_index: HashMap<IVec2, (NodeIndex, Pipe)> = HashMap::new();
-
-    all_tiles.iter().for_each(|(&pos, &pipe)| {
-        let Some(pipe) = pipe else {
-            return;
-        };
-        let index = graph.add_node((pos, pipe));
-        pos_to_index.insert(pos, (index, pipe));
-    });
-
-    graph.extend_with_edges(pos_to_index.iter().flat_map(|(&pos, &(index, pipe))| {
-        match pipe {
-            Pipe::Vertical => vec![Direction::North, Direction::South],
-            Pipe::Horizontal => vec![Direction::West, Direction::East],
-            Pipe::NE90 => vec![Direction::North, Direction::East],
-            Pipe::NW90 => vec![Direction::North, Direction::West],
-            Pipe::SE90 => vec![Direction::South, Direction::East],
-            Pipe::SW90 => vec![Direction::South, Direction::West],
-            Pipe::Start => [
-                Direction::North,
-                Direction::East,
-                Direction::South,
-                Direction::West,
-            ]
-            .into_iter()
-            .filter(|direction| {
-                let coord = pos + direction.get_offset();
-                if let Some(Some(pipe)) = all_tiles.get(&coord) {
-                    match (direction, pipe) {
-                        (Direction::North, Pipe::Vertical)
-                        | (Direction::North, Pipe::SE90)
-                        | (Direction::North, Pipe::SW90)
-                        | (Direction::East, Pipe::Horizontal)
-                        | (Direction::East, Pipe::NW90)
-                        | (Direction::East, Pipe::SW90)
-                        | (Direction::South, Pipe::Vertical)
-                        | (Direction::South, Pipe::NE90)
-                        | (Direction::South, Pipe::NW90)
-                        | (Direction::West, Pipe::Horizontal)
-                        | (Direction::West, Pipe::NE90)
-                        | (Direction::West, Pipe::SE90) => true,
-                        _ => false,
-                    }
-                } else {
-                    false
-                }
-            })
-            .collect(),
-        }
-        .into_iter()
-        .map(move |dir| (dir, index, pos))
-        .filter_map(|(direction, index, pos)| {
-            Some((index, pos_to_index.get(&(pos + direction.get_offset()))?.0))
+        .inspect(|(pos, pipe)| {
+            if pipe == &Some(Pipe::Start) {
+                start_pos = *pos
+            }
         })
-    }));
-
-    // println!("{:?}", petgraph::dot::Dot::new(&graph));
-
-    let (start, start_pos) = pos_to_index
-        .iter()
-        .find_map(|(&pos, &(index, pipe))| (pipe == Pipe::Start).then_some((index, pos)))
-        .expect("start pipe to exist");
-
-    let pipe_tiles: HashMap<IVec2, Pipe> = dijkstra(&graph, start, None, |_| 1)
-        .keys()
-        .filter_map(|index| graph.node_weight(*index))
-        .cloned()
         .collect();
 
-    let start_pipe = match [
+    let (opposite_start_direction, start_pipe) = match [
         (Direction::North, [Pipe::Vertical, Pipe::SE90, Pipe::SW90]),
         (Direction::South, [Pipe::Vertical, Pipe::NE90, Pipe::NW90]),
         (Direction::East, [Pipe::Horizontal, Pipe::NW90, Pipe::SW90]),
@@ -155,20 +103,59 @@ fn process(input: &str) -> String {
     .expect("to find two connection pipes")
     {
         // Order is guaranteed from the array above
-        (Direction::North, Direction::South) => Pipe::Vertical,
-        (Direction::East, Direction::West) => Pipe::Horizontal,
-        (Direction::North, Direction::East) => Pipe::NE90,
-        (Direction::North, Direction::West) => Pipe::NW90,
-        (Direction::South, Direction::East) => Pipe::SE90,
-        (Direction::South, Direction::West) => Pipe::SW90,
+        (dir @ Direction::North, Direction::South) => (dir, Pipe::Vertical),
+        (dir @ Direction::East, Direction::West) => (dir, Pipe::Horizontal),
+        (dir @ Direction::North, Direction::East) => (dir, Pipe::NE90),
+        (dir @ Direction::North, Direction::West) => (dir, Pipe::NW90),
+        (dir @ Direction::South, Direction::East) => (dir, Pipe::SE90),
+        (dir @ Direction::South, Direction::West) => (dir, Pipe::SW90),
         dir => unreachable!("invalied start connections, {dir:?}"),
     };
+
+    let mut current_pos = start_pos;
+    let mut current_pipe = start_pipe;
+    let mut last_direction = !opposite_start_direction;
+    let mut pipe_tiles: HashMap<IVec2, Pipe> = HashMap::new();
+    while current_pipe != Pipe::Start {
+        let next_direction = match (&last_direction, current_pipe) {
+            (Direction::East, Pipe::Horizontal) => Direction::East,
+            (Direction::West, Pipe::Horizontal) => Direction::West,
+            (Direction::North, Pipe::Vertical) => Direction::North,
+            (Direction::South, Pipe::Vertical) => Direction::South,
+            (Direction::South, Pipe::NE90) => Direction::East,
+            (Direction::West, Pipe::NE90) => Direction::North,
+            (Direction::South, Pipe::NW90) => Direction::West,
+            (Direction::East, Pipe::NW90) => Direction::North,
+            (Direction::North, Pipe::SE90) => Direction::East,
+            (Direction::West, Pipe::SE90) => Direction::South,
+            (Direction::North, Pipe::SW90) => Direction::West,
+            (Direction::East, Pipe::SW90) => Direction::South,
+            _ => unreachable!(
+                "Invalid path was taken: {last_direction:?}, {current_pipe:?} after {} pipes",
+                pipe_tiles.len()
+            ),
+        };
+
+        let next_pos = current_pos + next_direction.get_offset();
+        let next_pipe = all_tiles
+            .get(&next_pos)
+            .expect("to find next pipe in main loop")
+            .expect("pipes in main loop to connect to pipes");
+
+        pipe_tiles.insert(next_pos, next_pipe);
+
+        current_pos = next_pos;
+        current_pipe = next_pipe;
+        last_direction = next_direction;
+    }
+
+    dbg!(pipe_tiles.len());
 
     list_of_tiles
         .into_iter()
         .enumerate()
         .map(|(y, row)| {
-            println!("");
+            // println!("");
             row.into_iter()
                 .enumerate()
                 .fold(
