@@ -21,17 +21,13 @@ fn process(input: &str) -> String {
     let columns_with_galaxies: BTreeSet<i32> = galaxies.iter().map(|pos| pos.y).collect();
 
     let rows_containing_galaxies = (min_x..max_x).into_iter().collect();
-    let mut rows_to_expand = rows_with_galaxies
+    let rows_to_expand = rows_with_galaxies
         .symmetric_difference(&rows_containing_galaxies)
         .collect_vec();
     let columns_containing_galaxies = (min_y..max_y).into_iter().collect();
-    let mut columns_to_expand = columns_with_galaxies
+    let columns_to_expand = columns_with_galaxies
         .symmetric_difference(&columns_containing_galaxies)
         .collect_vec();
-
-    // dbg!(&rows_to_expand, &columns_to_expand);
-    rows_to_expand.sort();
-    columns_to_expand.sort();
 
     let expanded_galaxies = galaxies
         .into_iter()
