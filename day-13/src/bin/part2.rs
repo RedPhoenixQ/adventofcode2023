@@ -43,24 +43,26 @@ fn process(input: &str) -> String {
                 }).collect::<String>())
             }
 
-            let Some(row_index) = grid
-                .rows_iter()
-                .zip(grid.rows_iter().skip(1))
-                .enumerate()
-                .filter_map(|(i, (row1, row2))| {
-                    row1.zip(row2)
-                        .find(|(el1, el2)| el1 != el2)
-                        .is_none()
-                        .then_some(i)
-                })
+            let Some(row_index) = (0..grid.num_rows() - 1)
                 .find(|&middle_top_i| {
                     let mut top = middle_top_i;
                     let mut bottom = middle_top_i + 1;
                     dbg!(top, bottom);
+                    let mut has_made_correction = false;
                     while let (Ok(left_row), Ok(right_row)) = (grid.row_iter(top), grid.row_iter(bottom)) {
                         if left_row
                             .zip(right_row)
-                            .find(|(el1, el2)| el1 != el2)
+                            .find(|(el1, el2)| {
+                                if el1 != el2 {
+                                    if !has_made_correction {
+                                        has_made_correction = true;
+                                        return false;   
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            })
                             .is_some()
                         {
                             return false;
@@ -68,26 +70,27 @@ fn process(input: &str) -> String {
                         top = top.wrapping_sub(1);
                         bottom += 1;
                     }
-                    true 
+                    has_made_correction
                 }) else {
-                   return RowOrColumn::Column(grid
-                .columns_iter()
-                .zip(grid.columns_iter().skip(1))
-                .enumerate()
-                .filter_map(|(i, (column1, column2))| {
-                    column1.zip(column2)
-                        .find(|(el1, el2)| el1 != el2)
-                        .is_none()
-                        .then_some(i)
-                })
+                   return RowOrColumn::Column((0..grid.num_columns() - 1)
                 .find(|&middle_left_i| {
                 let mut left = middle_left_i;
                     let mut right = middle_left_i + 1;
                     dbg!(left, right);
+                    let mut has_made_correction = false;
                     while let (Ok(left_column), Ok(right_column)) = (grid.column_iter(left), grid.column_iter(right)) {
                         if left_column
                             .zip(right_column)
-                            .find(|(el1, el2)| el1 != el2)
+                            .find(|(el1, el2)| {
+                                if el1 != el2 {
+                                    if !has_made_correction {
+                                        has_made_correction = true;
+                                        return false;   
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }} )
                             .is_some()
                         {
                             return false;
@@ -95,7 +98,7 @@ fn process(input: &str) -> String {
                         left = left.wrapping_sub(1);
                         right += 1;
                     }
-                    true
+                    has_made_correction
                 }).expect("Horizontal mirror because there was no vertical mirror"))
                 };
             RowOrColumn::Row(row_index)
@@ -143,7 +146,7 @@ mod test {
 #####.##.
 ..##..###
 #....#..#";
-    const ANSWER: &str = "405";
+    const ANSWER: &str = "400";
 
     #[test]
     fn example() {
