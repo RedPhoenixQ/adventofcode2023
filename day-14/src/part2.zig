@@ -182,13 +182,12 @@ fn process(allocator: std.mem.Allocator, input: []const u8) !usize {
         }
         permutations.deinit();
     }
-    var remaining_iterations: ?usize = null;
 
     var count_round_tiles: usize = 0;
     var valid_stack = std.ArrayList(*Tile).init(allocator);
     defer valid_stack.deinit();
 
-    for (0..MAX_CYCLES) |i| {
+    outer: for (0..MAX_CYCLES) |i| {
         std.debug.print("\rIter {d} ", .{i});
 
         while (grid_iter.next()) |line| {
@@ -219,23 +218,20 @@ fn process(allocator: std.mem.Allocator, input: []const u8) !usize {
             count_round_tiles = 0;
             valid_stack.clearRetainingCapacity();
         }
-        if (remaining_iterations != null) {
-            remaining_iterations.? -= 1;
-            if (remaining_iterations.? == 0) {
-                break;
+
+        for (permutations.items, 0..) |perm, cycle_start| {
+            if (std.mem.eql(Tile, grid.array.items, perm.items)) {
+                const loop_len = i - cycle_start;
+                const remaining_iterations = (MAX_CYCLES - cycle_start) % (loop_len) - 1;
+                std.debug.print("Found matching permutation at {d}, loop_len = {d}, remaining = {d}\n", .{ i, loop_len, remaining_iterations });
+                const ending_perm = permutations.orderedRemove(cycle_start + remaining_iterations);
+                grid.array.deinit();
+                grid.array = ending_perm;
+                break :outer;
             }
         } else {
-            for (permutations.items, 0..) |perm, cycle_start| {
-                if (std.mem.eql(Tile, grid.array.items, perm.items)) {
-                    const loop_len = i - cycle_start;
-                    remaining_iterations = (MAX_CYCLES - cycle_start) % (loop_len) - 1;
-                    std.debug.print("Found matching permutation at {d}, loop_len = {d}, remaining = {d}\n", .{ i, loop_len, remaining_iterations.? });
-                    break;
-                }
-            } else {
-                std.debug.print("Adding permutation at {d}\n", .{i});
-                try permutations.append(try grid.array.clone());
-            }
+            std.debug.print("Adding permutation at {d}\n", .{i});
+            try permutations.append(try grid.array.clone());
         }
 
         grid_iter.reset();
