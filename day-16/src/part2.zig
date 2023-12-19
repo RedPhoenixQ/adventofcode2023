@@ -58,12 +58,12 @@ const Layout = struct {
             entry.value_ptr.* = [4]bool{ false, false, false, false };
             entry.value_ptr.*[@intFromEnum(direction)] = true;
         } else if (entry.value_ptr.*[@intFromEnum(direction)]) {
-            std.debug.print("Direction repeat on {d}\n", .{pos});
+            // std.debug.print("Direction repeat on {d}\n", .{pos});
             return;
         }
 
         const tile = self.grid.items[pos];
-        std.debug.print("Pos: {d}, tile: {}\n", .{ pos, tile });
+        // std.debug.print("Pos: {d}, tile: {}\n", .{ pos, tile });
         for (switch (tile) {
             .Empty => [_]?Direction{ direction, null },
             .HorizontalSplit => switch (direction) {
@@ -89,7 +89,7 @@ const Layout = struct {
         }) |new_direction| {
             if (new_direction == null) continue;
             const new_pos = self.next_pos(pos, new_direction.?) orelse {
-                std.debug.print("Next_pos failed at pos {d}\n", .{pos});
+                // std.debug.print("Next_pos failed at pos {d}\n", .{pos});
                 return;
             };
             try self.walk(new_pos, new_direction.?, energized_tiles);
@@ -166,9 +166,28 @@ fn process(allocator: std.mem.Allocator, input: []const u8) !usize {
     var energized_tiles = EnergizedMap.init(allocator);
     defer energized_tiles.deinit();
 
-    try layout.walk(0, .Right, &energized_tiles);
+    var max_energy: usize = 0;
 
-    return energized_tiles.count();
+    for ([4]Direction{ .Down, .Left, .Up, .Right }) |direction| {
+        const side_len = switch (direction) {
+            .Down, .Up => layout.width,
+            .Left, .Right => layout.height,
+        };
+        for (0..side_len) |i| {
+            const start_pos = switch (direction) {
+                .Down => i,
+                .Left => layout.width * i + (layout.width - 1),
+                .Up => layout.width * layout.height - i - 1,
+                .Right => layout.width * i,
+            };
+            try layout.walk(start_pos, direction, &energized_tiles);
+            std.debug.print("Testing {d} from {}, energy {d}\n", .{ start_pos, direction, energized_tiles.count() });
+            max_energy = @max(max_energy, energized_tiles.count());
+            energized_tiles.clearRetainingCapacity();
+        }
+    }
+
+    return max_energy;
 }
 
 pub fn main() !void {
@@ -194,5 +213,5 @@ test "example" {
         \\.|....-|.\
         \\..//.|....
     ;
-    try std.testing.expectEqual(@as(usize, 46), try process(std.testing.allocator, input));
+    try std.testing.expectEqual(@as(usize, 51), try process(std.testing.allocator, input));
 }
