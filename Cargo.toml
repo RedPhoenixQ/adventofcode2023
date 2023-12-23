@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = ["day-*"]
-exclude = ["day-14", "day-15", "day-16", "day-17"]
+exclude = ["day-14", "day-15", "day-16", "day-17", "day-21"]
 
 [workspace.dependencies]
 anyhow = "1.0.75"
