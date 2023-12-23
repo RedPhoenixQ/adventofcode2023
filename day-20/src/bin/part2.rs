@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 
+use indicatif::ProgressIterator;
 use nom::{
     bytes::complete,
     character::complete::{alpha1, multispace1, one_of},
@@ -8,8 +9,7 @@ use nom::{
     sequence::{separated_pair, tuple},
     IResult, Parser,
 };
-
-const BUTTON_PRESSES: usize = 1000;
+use num::Integer;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pulse {
@@ -96,6 +96,21 @@ fn process(input: &str) -> String {
     }
     dbg!(&modules);
 
+    let (final_name, mut loops): (&str, HashMap<&str, (usize, Option<usize>)>) = modules
+        .values()
+        .find_map(|module| match module {
+            Module {
+                destinations,
+                kind: ModuleKind::Conjunction { states },
+                ..
+            } if destinations.contains(&"rx") => Some((
+                module.name,
+                states.keys().map(|&name| (name, (0, None))).collect(),
+            )),
+            _ => None,
+        })
+        .unwrap();
+
     struct QueueItem<'a> {
         to: &'a str,
         from: &'a str,
@@ -103,11 +118,13 @@ fn process(input: &str) -> String {
     }
 
     let mut queue: VecDeque<QueueItem> = VecDeque::new();
-    let mut low_pulses = 0;
-    let mut high_pulses = 0;
 
-    for _ in 0..BUTTON_PRESSES {
-        println!("NEW ROUND HERE\n");
+    for button_presses in 0usize.. {
+        if loops.values().all(|(_, loop_end)| loop_end.is_some()) {
+            break;
+        }
+
+        // println!("NEW ROUND HERE\n");
         // Button module pressed
         queue.push_back(QueueItem {
             from: "button",
@@ -116,17 +133,35 @@ fn process(input: &str) -> String {
         });
         // dbg!(&queue, &modules);
         while let Some(QueueItem { to, from, pulse }) = queue.pop_front() {
-            match pulse {
-                Pulse::High => high_pulses += 1,
-                Pulse::Low => low_pulses += 1,
-            }
             let Some(module) = modules.get_mut(to) else {
                 continue;
             };
             let Some(pulse_to_send) = module.kind.handle_pulse(pulse, from) else {
                 continue;
             };
-            println!("{to} {pulse_to_send:?} -> {:?}", module.destinations);
+
+            if to == final_name && pulse == Pulse::High {
+                if let ModuleKind::Conjunction { states } = &module.kind {
+                    for name in states
+                        .iter()
+                        .filter_map(|(name, pulse)| (pulse == &Pulse::High).then_some(name))
+                    {
+                        loops.insert(
+                            &name,
+                            match loops.get(name).unwrap() {
+                                (0, None) => (button_presses, None),
+                                (prev, None) | (_, Some(prev)) => {
+                                    println!("LOOP LEN FOR {name}: {}", button_presses - prev);
+                                    (*prev, Some(button_presses))
+                                }
+                            },
+                        );
+                    }
+                    dbg!(button_presses, states);
+                }
+            }
+
+            // println!("{to} {pulse_to_send:?} -> {:?}", module.destinations);
             for destination in &module.destinations {
                 queue.push_back(QueueItem {
                     from: module.name,
@@ -136,12 +171,28 @@ fn process(input: &str) -> String {
             }
         }
 
+        if let Some(Module {
+            kind: ModuleKind::Conjunction { states },
+            ..
+        }) = modules.get(final_name)
+        {
+            if states.values().any(|&state| state == Pulse::High) {
+                dbg!(button_presses, states);
+                for sub in states.keys().map(|name| modules.get(name).unwrap()) {
+                    println!("{sub:?}");
+                }
+            }
+        }
+
         // dbg!(&modules);
     }
 
-    dbg!(low_pulses, high_pulses);
-
-    (low_pulses * high_pulses).to_string()
+    loops
+        .values()
+        .map(|(start, end)| end.unwrap() - start)
+        .reduce(|acc, loop_len| acc.lcm(&loop_len))
+        .unwrap()
+        .to_string()
 }
 
 fn parse(input: &str) -> IResult<&str, Vec<Module>> {
