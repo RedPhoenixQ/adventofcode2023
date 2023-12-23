@@ -1,20 +1,34 @@
-use std::{cmp::Ordering, collections::HashMap};
+use std::{cmp::Ordering, collections::HashMap, ops::Range};
 
 use nom::{
     branch::alt,
-    character::complete::{self, alpha1, multispace1, newline, one_of},
-    combinator::opt,
+    character::complete::{self, alpha1, newline, one_of},
     multi::separated_list1,
-    sequence::{delimited, separated_pair, tuple},
+    sequence::{delimited, tuple},
     IResult, Parser,
 };
 
-#[derive(Debug)]
+const MIN_RATING: u32 = 1;
+const MAX_RATING: u32 = 4000;
+
+#[derive(Debug, Clone)]
 struct Rating {
-    x: u32,
-    m: u32,
-    a: u32,
-    s: u32,
+    x: Range<u32>,
+    m: Range<u32>,
+    a: Range<u32>,
+    s: Range<u32>,
+}
+
+impl Default for Rating {
+    fn default() -> Self {
+        let range = MIN_RATING..MAX_RATING + 1;
+        Self {
+            x: range.clone(),
+            m: range.clone(),
+            a: range.clone(),
+            s: range.clone(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -58,118 +72,155 @@ enum Goto<'a> {
 }
 
 fn process(input: &str) -> String {
-    let (_, (workflows, ratings)) = parse(input).unwrap();
-    dbg!(&workflows, &ratings);
+    let (_, workflows) = parse(input).unwrap();
+    dbg!(&workflows);
 
-    let start_workflow = workflows.get("in").expect("'in' workflow to exist");
+    let mut accepted_ranges: Vec<Rating> = Vec::new();
 
-    ratings
+    find_max_ranges(Rating::default(), "in", &workflows, &mut accepted_ranges);
+
+    accepted_ranges
         .into_iter()
-        .filter_map(|rating| {
-            let mut workflow = start_workflow;
-            loop {
-                let goto = workflow
-                    .iter()
-                    .find_map(|rule| match rule {
-                        Rule::GoTo(goto) => Some(goto),
-                        Rule::Choose {
-                            category,
-                            order,
-                            value,
-                            goto,
-                        } => (match category {
-                            Category::ExtremelyCool => rating.x,
-                            Category::Musical => rating.m,
-                            Category::Aerodynamic => rating.a,
-                            Category::Shiny => rating.s,
-                        }
-                        .cmp(value)
-                            == *order)
-                            .then_some(goto),
-                    })
-                    .expect("atleast one rule to match");
-
-                match goto {
-                    Goto::Accept => return Some(rating),
-                    Goto::Reject => return None,
-                    Goto::Rule(name) => {
-                        workflow = workflows.get(name).expect("linked workflows to exist");
-                    }
-                };
-            }
+        .inspect(|r| println!("{r:?}"))
+        .fold(0, |acc, rating| {
+            acc + rating.x.len() * rating.m.len() * rating.a.len() * rating.s.len()
         })
-        .map(|r| r.x + r.m + r.a + r.s)
-        .sum::<u32>()
         .to_string()
 }
 
-fn parse(input: &str) -> IResult<&str, (HashMap<&str, Vec<Rule>>, Vec<Rating>)> {
-    fn rating(input: &str) -> IResult<&str, u32> {
-        delimited(
-            tuple((one_of("xmas"), complete::char('='))),
-            complete::u32,
-            opt(complete::char(',')),
-        )
-        .parse(input)
-    }
+fn find_max_ranges(
+    mut rating: Rating,
+    workflow_name: &str,
+    workflows: &HashMap<&str, Vec<Rule>>,
+    accepted_ranges: &mut Vec<Rating>,
+) {
+    println!("Staring new find: {rating:?}, {workflow_name}");
+    for workflow in workflows.get(workflow_name).unwrap() {
+        match workflow {
+            Rule::Choose {
+                category,
+                order,
+                value,
+                goto,
+            } if match category {
+                Category::ExtremelyCool if rating.x.contains(value) => true,
+                Category::Musical if rating.m.contains(value) => true,
+                Category::Aerodynamic if rating.a.contains(value) => true,
+                Category::Shiny if rating.s.contains(value) => true,
+                _ => false,
+            } =>
+            {
+                let mut next_rating = rating.clone();
+                match order {
+                    Ordering::Greater => match category {
+                        Category::ExtremelyCool => {
+                            rating.x.end = *value + 1;
+                            next_rating.x.start = *value + 1;
+                        }
+                        Category::Musical => {
+                            rating.m.end = *value + 1;
+                            next_rating.m.start = *value + 1;
+                        }
+                        Category::Aerodynamic => {
+                            rating.a.end = *value + 1;
+                            next_rating.a.start = *value + 1;
+                        }
+                        Category::Shiny => {
+                            rating.s.end = *value + 1;
+                            next_rating.s.start = *value + 1;
+                        }
+                    },
+                    Ordering::Less => match category {
+                        Category::ExtremelyCool => {
+                            rating.x.start = *value;
+                            next_rating.x.end = *value;
+                        }
+                        Category::Musical => {
+                            rating.m.start = *value;
+                            next_rating.m.end = *value;
+                        }
+                        Category::Aerodynamic => {
+                            rating.a.start = *value;
+                            next_rating.a.end = *value;
+                        }
+                        Category::Shiny => {
+                            rating.s.start = *value;
+                            next_rating.s.end = *value;
+                        }
+                    },
+                    Ordering::Equal => unreachable!("Rules should not have equal comparisons"),
+                }
 
-    separated_pair(
-        separated_list1(
-            newline,
-            tuple((
-                alpha1,
-                delimited(
-                    complete::char('{'),
-                    separated_list1(
-                        complete::char(','),
-                        alt((
-                            tuple((
-                                one_of("xmas"),
-                                one_of("<>"),
-                                complete::u32,
-                                complete::char(':'),
-                                alpha1,
-                            ))
-                            .map(
-                                |(category, compare, value, _, goto)| Rule::Choose {
-                                    category: category.try_into().unwrap(),
-                                    value,
-                                    goto: match goto {
-                                        "A" => Goto::Accept,
-                                        "R" => Goto::Reject,
-                                        name => Goto::Rule(name),
-                                    },
-                                    order: match compare {
-                                        '<' => Ordering::Less,
-                                        '>' => Ordering::Greater,
-                                        _ => unreachable!("Invalid compare character parsed"),
-                                    },
-                                },
-                            ),
-                            complete::alpha1.map(|goto| {
-                                Rule::GoTo(match goto {
+                match goto {
+                    Goto::Rule(next_name) => {
+                        find_max_ranges(next_rating, &next_name, workflows, accepted_ranges);
+                    }
+                    Goto::Accept => accepted_ranges.push(next_rating),
+                    Goto::Reject => {}
+                }
+            }
+            Rule::GoTo(goto) => match goto {
+                Goto::Rule(next_name) => {
+                    find_max_ranges(rating.clone(), &next_name, workflows, accepted_ranges)
+                }
+                Goto::Accept => {
+                    println!("Accpeted {rating:?} default");
+                    accepted_ranges.push(rating.clone())
+                }
+                Goto::Reject => {}
+            },
+            _ => {}
+        }
+    }
+}
+
+fn parse(input: &str) -> IResult<&str, HashMap<&str, Vec<Rule>>> {
+    separated_list1(
+        newline,
+        tuple((
+            alpha1,
+            delimited(
+                complete::char('{'),
+                separated_list1(
+                    complete::char(','),
+                    alt((
+                        tuple((
+                            one_of("xmas"),
+                            one_of("<>"),
+                            complete::u32,
+                            complete::char(':'),
+                            alpha1,
+                        ))
+                        .map(|(category, compare, value, _, goto)| {
+                            Rule::Choose {
+                                category: category.try_into().unwrap(),
+                                value,
+                                goto: match goto {
                                     "A" => Goto::Accept,
                                     "R" => Goto::Reject,
                                     name => Goto::Rule(name),
-                                })
-                            }),
-                        )),
-                    ),
-                    complete::char('}'),
+                                },
+                                order: match compare {
+                                    '<' => Ordering::Less,
+                                    '>' => Ordering::Greater,
+                                    _ => unreachable!("Invalid compare character parsed"),
+                                },
+                            }
+                        }),
+                        complete::alpha1.map(|goto| {
+                            Rule::GoTo(match goto {
+                                "A" => Goto::Accept,
+                                "R" => Goto::Reject,
+                                name => Goto::Rule(name),
+                            })
+                        }),
+                    )),
                 ),
-            )),
-        )
-        .map(|workflows| workflows.into_iter().collect()),
-        multispace1,
-        separated_list1(
-            newline,
-            delimited(
-                complete::char('{'),
-                tuple((rating, rating, rating, rating)).map(|(x, m, a, s)| Rating { x, m, a, s }),
                 complete::char('}'),
             ),
-        ),
+        )),
     )
+    .map(|workflows| workflows.into_iter().collect())
     .parse(input)
 }
 
@@ -198,7 +249,7 @@ hdj{m>838:A,pv}
 {x=2036,m=264,a=79,s=2244}
 {x=2461,m=1339,a=466,s=291}
 {x=2127,m=1623,a=2188,s=1013}";
-    const ANSWER: &str = "19114";
+    const ANSWER: &str = "167409079868000";
 
     #[test]
     fn example() {
