@@ -13,8 +13,6 @@ struct Block {
     x: RangeInclusive<u32>,
     y: RangeInclusive<u32>,
     z: RangeInclusive<u32>,
-    supported_by: Vec<usize>,
-    supports: Vec<usize>,
 }
 
 fn process(input: &str) -> String {
@@ -24,26 +22,32 @@ fn process(input: &str) -> String {
     //dbg!(&blocks, blocks.len());
 
     let mut tower: Vec<(usize, Block)> = Vec::new();
+    let mut solo_supporting_blocks: HashSet<usize> = HashSet::new();
 
     for (block_i, block) in blocks.into_iter().enumerate() {
         let mut z_offset = 0;
-        let mut supported_by = block.supported_by;
+        enum SupportingBlocks {
+            None,
+            One(usize),
+            Many,
+        }
+        let mut supporting_blocks: SupportingBlocks = SupportingBlocks::None;
 
         for (tower_i, top_block) in tower.iter().rev() {
             if block.x.intersect(&top_block.x).is_any() && block.y.intersect(&top_block.y).is_any()
             {
-                if supported_by.is_empty() {
-                    z_offset = *block.z.start() - *top_block.z.end() - 1;
-                } else if *block.z.start() - *top_block.z.end() - 1 > z_offset {
-                    break;
-                }
-                supported_by.push(*tower_i);
+                match supporting_blocks {
+                    SupportingBlocks::None => {
+                        z_offset = *block.z.start() - *top_block.z.end() - 1;
+                        supporting_blocks = SupportingBlocks::One(*tower_i);
+                    }
+                    _ if *block.z.start() - *top_block.z.end() - 1 > z_offset => break,
+                    _ => {
+                        supporting_blocks = SupportingBlocks::Many;
+                        break;
+                    }
+                };
             }
-        }
-
-        for &index in &supported_by {
-            let (_, tower_block) = tower.get_mut(index).unwrap();
-            tower_block.supports.push(block_i);
         }
 
         tower.push((
@@ -52,8 +56,6 @@ fn process(input: &str) -> String {
                 x: block.x,
                 y: block.y,
                 z: *block.z.start() - z_offset..=*block.z.end() - z_offset,
-                supported_by,
-                supports: block.supports,
             },
         ));
 
@@ -61,24 +63,17 @@ fn process(input: &str) -> String {
 
         //println!("\nNEXT ROUND");
         //dbg!(&tower, z_offset, &supporting_blocks);
+
+        if let SupportingBlocks::One(solo_support) = supporting_blocks {
+            solo_supporting_blocks.insert(solo_support);
+        }
     }
 
-    dbg!(&tower);
+    //dbg!(&solo_supporting_blocks, &tower);
 
-    // dbg!(tower.len(), solo_supporting_blocks.len());
+    dbg!(tower.len(), solo_supporting_blocks.len());
 
-    // (tower.len() - solo_supporting_blocks.len()).to_string()
-
-    tower
-        .iter()
-        .filter(|(_, block)| {
-            !block.supports.iter().any(|&block_i| {
-                let (_, block) = tower.get(block_i).unwrap();
-                block.supported_by.len() == 1
-            })
-        })
-        .count()
-        .to_string()
+    (tower.len() - solo_supporting_blocks.len()).to_string()
 }
 
 fn parse(input: &str) -> IResult<&str, Vec<Block>> {
@@ -97,8 +92,6 @@ fn parse(input: &str) -> IResult<&str, Vec<Block>> {
             x: start.0..=end.0,
             y: start.1..=end.1,
             z: start.2..=end.2,
-            supported_by: Vec::new(),
-            supports: Vec::new(),
         }),
     )
     .parse(input)
